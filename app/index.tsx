@@ -1,7 +1,7 @@
 import Slider from '@react-native-community/slider';
 import { StatusBar } from 'expo-status-bar';
-import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { Directions, Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -16,6 +16,8 @@ const COLORS: LightColor[] = [
 ];
 
 const CONTROLS_MIN_BRIGHTNESS = 0.5;
+const BRIGHTNESS_STEP = 0.1;
+const FADE_DURATION = 220;
 
 function scaleColor(hex: string, brightness: number): string {
   const r = Math.round(parseInt(hex.slice(1, 3), 16) * brightness);
@@ -32,6 +34,16 @@ function dimmedWhite(brightness: number, alpha: number): string {
 export default function ScreenLight() {
   const [colorIndex, setColorIndex] = useState<number>(0);
   const [brightness, setBrightness] = useState<number>(1);
+  const [controlsVisible, setControlsVisible] = useState<boolean>(true);
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.timing(opacity, {
+      toValue: controlsVisible ? 1 : 0,
+      duration: FADE_DURATION,
+      useNativeDriver: true,
+    }).start();
+  }, [controlsVisible, opacity]);
 
   const selectedColor = COLORS[colorIndex].value;
   const displayColor = scaleColor(selectedColor, brightness);
@@ -41,9 +53,12 @@ export default function ScreenLight() {
   const unselectedRing = dimmedWhite(controlsBrightness, 0.25);
   const sliderMaxTrack = dimmedWhite(controlsBrightness, 0.3);
 
-  const swipeGesture = useMemo(() => {
+  const gesture = useMemo(() => {
     const cycleBy = (step: number) =>
       setColorIndex((i) => (i + step + COLORS.length) % COLORS.length);
+    const adjustBrightness = (delta: number) =>
+      setBrightness((b) => Math.max(0, Math.min(1, b + delta)));
+
     return Gesture.Race(
       Gesture.Fling()
         .direction(Directions.LEFT)
@@ -53,15 +68,38 @@ export default function ScreenLight() {
         .direction(Directions.RIGHT)
         .runOnJS(true)
         .onStart(() => cycleBy(-1)),
+      Gesture.Fling()
+        .direction(Directions.UP)
+        .runOnJS(true)
+        .onStart(() => adjustBrightness(BRIGHTNESS_STEP)),
+      Gesture.Fling()
+        .direction(Directions.DOWN)
+        .runOnJS(true)
+        .onStart(() => adjustBrightness(-BRIGHTNESS_STEP)),
     );
   }, []);
 
   return (
-    <GestureDetector gesture={swipeGesture}>
+    <GestureDetector gesture={gesture}>
       <View style={[styles.container, { backgroundColor: displayColor }]}>
         <StatusBar hidden />
-        <SafeAreaView style={styles.controlsWrapper} edges={['bottom']}>
-          <View style={styles.controls}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={() => setControlsVisible((v) => !v)}
+        />
+        <SafeAreaView
+          style={[styles.controlsWrapper, { pointerEvents: 'box-none' }]}
+          edges={['bottom']}
+        >
+          <Animated.View
+            style={[
+              styles.controls,
+              {
+                opacity,
+                pointerEvents: controlsVisible ? 'auto' : 'none',
+              },
+            ]}
+          >
             <View style={styles.colorRow}>
               {COLORS.map((color, index) => {
                 const isSelected = colorIndex === index;
@@ -94,7 +132,7 @@ export default function ScreenLight() {
               maximumTrackTintColor={sliderMaxTrack}
               thumbTintColor={selectedRing}
             />
-          </View>
+          </Animated.View>
         </SafeAreaView>
       </View>
     </GestureDetector>
