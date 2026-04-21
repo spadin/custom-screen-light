@@ -1,7 +1,8 @@
 import Slider from '@react-native-community/slider';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { Directions, Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type LightColor = { name: string; value: string };
@@ -29,9 +30,10 @@ function dimmedWhite(brightness: number, alpha: number): string {
 }
 
 export default function ScreenLight() {
-  const [selectedColor, setSelectedColor] = useState<string>(COLORS[0].value);
+  const [colorIndex, setColorIndex] = useState<number>(0);
   const [brightness, setBrightness] = useState<number>(1);
 
+  const selectedColor = COLORS[colorIndex].value;
   const displayColor = scaleColor(selectedColor, brightness);
   const controlsBrightness =
     CONTROLS_MIN_BRIGHTNESS + (1 - CONTROLS_MIN_BRIGHTNESS) * brightness;
@@ -39,46 +41,63 @@ export default function ScreenLight() {
   const unselectedRing = dimmedWhite(controlsBrightness, 0.25);
   const sliderMaxTrack = dimmedWhite(controlsBrightness, 0.3);
 
+  const swipeGesture = useMemo(() => {
+    const cycleBy = (step: number) =>
+      setColorIndex((i) => (i + step + COLORS.length) % COLORS.length);
+    return Gesture.Race(
+      Gesture.Fling()
+        .direction(Directions.LEFT)
+        .runOnJS(true)
+        .onStart(() => cycleBy(1)),
+      Gesture.Fling()
+        .direction(Directions.RIGHT)
+        .runOnJS(true)
+        .onStart(() => cycleBy(-1)),
+    );
+  }, []);
+
   return (
-    <View style={[styles.container, { backgroundColor: displayColor }]}>
-      <StatusBar hidden />
-      <SafeAreaView style={styles.controlsWrapper} edges={['bottom']}>
-        <View style={styles.controls}>
-          <View style={styles.colorRow}>
-            {COLORS.map((color) => {
-              const isSelected = selectedColor === color.value;
-              return (
-                <Pressable
-                  key={color.value}
-                  onPress={() => setSelectedColor(color.value)}
-                  accessibilityLabel={color.name}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isSelected }}
-                  style={[
-                    styles.colorButton,
-                    {
-                      backgroundColor: scaleColor(color.value, controlsBrightness),
-                      borderColor: isSelected ? selectedRing : unselectedRing,
-                    },
-                    isSelected && styles.colorButtonSelected,
-                  ]}
-                />
-              );
-            })}
+    <GestureDetector gesture={swipeGesture}>
+      <View style={[styles.container, { backgroundColor: displayColor }]}>
+        <StatusBar hidden />
+        <SafeAreaView style={styles.controlsWrapper} edges={['bottom']}>
+          <View style={styles.controls}>
+            <View style={styles.colorRow}>
+              {COLORS.map((color, index) => {
+                const isSelected = colorIndex === index;
+                return (
+                  <Pressable
+                    key={color.value}
+                    onPress={() => setColorIndex(index)}
+                    accessibilityLabel={color.name}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
+                    style={[
+                      styles.colorButton,
+                      {
+                        backgroundColor: scaleColor(color.value, controlsBrightness),
+                        borderColor: isSelected ? selectedRing : unselectedRing,
+                      },
+                      isSelected && styles.colorButtonSelected,
+                    ]}
+                  />
+                );
+              })}
+            </View>
+            <Slider
+              style={styles.slider}
+              minimumValue={0}
+              maximumValue={1}
+              value={brightness}
+              onValueChange={setBrightness}
+              minimumTrackTintColor={selectedRing}
+              maximumTrackTintColor={sliderMaxTrack}
+              thumbTintColor={selectedRing}
+            />
           </View>
-          <Slider
-            style={styles.slider}
-            minimumValue={0}
-            maximumValue={1}
-            value={brightness}
-            onValueChange={setBrightness}
-            minimumTrackTintColor={selectedRing}
-            maximumTrackTintColor={sliderMaxTrack}
-            thumbTintColor={selectedRing}
-          />
-        </View>
-      </SafeAreaView>
-    </View>
+        </SafeAreaView>
+      </View>
+    </GestureDetector>
   );
 }
 
