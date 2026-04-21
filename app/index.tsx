@@ -14,6 +14,8 @@ const COLORS: LightColor[] = [
   { name: 'Red', value: '#E61919' },
 ];
 
+const CONTROLS_MIN_BRIGHTNESS = 0.5;
+
 function scaleColor(hex: string, brightness: number): string {
   const r = Math.round(parseInt(hex.slice(1, 3), 16) * brightness);
   const g = Math.round(parseInt(hex.slice(3, 5), 16) * brightness);
@@ -21,11 +23,21 @@ function scaleColor(hex: string, brightness: number): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
+function dimmedWhite(brightness: number, alpha: number): string {
+  const c = Math.round(255 * brightness);
+  return `rgba(${c}, ${c}, ${c}, ${alpha})`;
+}
+
 export default function ScreenLight() {
   const [selectedColor, setSelectedColor] = useState<string>(COLORS[0].value);
   const [brightness, setBrightness] = useState<number>(1);
 
   const displayColor = scaleColor(selectedColor, brightness);
+  const controlsBrightness =
+    CONTROLS_MIN_BRIGHTNESS + (1 - CONTROLS_MIN_BRIGHTNESS) * brightness;
+  const selectedRing = dimmedWhite(controlsBrightness, 1);
+  const unselectedRing = dimmedWhite(controlsBrightness, 0.25);
+  const sliderMaxTrack = dimmedWhite(controlsBrightness, 0.3);
 
   return (
     <View style={[styles.container, { backgroundColor: displayColor }]}>
@@ -44,7 +56,10 @@ export default function ScreenLight() {
                   accessibilityState={{ selected: isSelected }}
                   style={[
                     styles.colorButton,
-                    { backgroundColor: color.value },
+                    {
+                      backgroundColor: scaleColor(color.value, controlsBrightness),
+                      borderColor: isSelected ? selectedRing : unselectedRing,
+                    },
                     isSelected && styles.colorButtonSelected,
                   ]}
                 />
@@ -57,9 +72,9 @@ export default function ScreenLight() {
             maximumValue={1}
             value={brightness}
             onValueChange={setBrightness}
-            minimumTrackTintColor="#FFFFFF"
-            maximumTrackTintColor="rgba(255, 255, 255, 0.3)"
-            thumbTintColor="#FFFFFF"
+            minimumTrackTintColor={selectedRing}
+            maximumTrackTintColor={sliderMaxTrack}
+            thumbTintColor={selectedRing}
           />
         </View>
       </SafeAreaView>
@@ -95,10 +110,8 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 24,
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
   },
   colorButtonSelected: {
-    borderColor: '#FFFFFF',
     borderWidth: 3,
     transform: [{ scale: 1.15 }],
   },
