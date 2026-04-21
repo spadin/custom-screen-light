@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Slider from '@react-native-community/slider';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -16,18 +17,28 @@ const COLORS: LightColor[] = [
 ];
 
 const CONTROLS_MIN_BRIGHTNESS = 0.5;
-const BRIGHTNESS_STEP = 0.1;
+const BRIGHTNESS_PAN_SENSITIVITY = 300;
 const FADE_DURATION = 220;
+const STORAGE_KEY = 'screen-light:state:v1';
+const PERSIST_DEBOUNCE_MS = 300;
+
+function clamp01(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  if (n < 0) return 0;
+  if (n > 1) return 1;
+  return n;
+}
 
 function scaleColor(hex: string, brightness: number): string {
-  const r = Math.round(parseInt(hex.slice(1, 3), 16) * brightness);
-  const g = Math.round(parseInt(hex.slice(3, 5), 16) * brightness);
-  const b = Math.round(parseInt(hex.slice(5, 7), 16) * brightness);
-  return `rgb(${r}, ${g}, ${b})`;
+  const b = clamp01(brightness);
+  const r = Math.round(parseInt(hex.slice(1, 3), 16) * b);
+  const g = Math.round(parseInt(hex.slice(3, 5), 16) * b);
+  const bl = Math.round(parseInt(hex.slice(5, 7), 16) * b);
+  return `rgb(${r}, ${g}, ${bl})`;
 }
 
 function dimmedWhite(brightness: number, alpha: number): string {
-  const c = Math.round(255 * brightness);
+  const c = Math.round(255 * clamp01(brightness));
   return `rgba(${c}, ${c}, ${c}, ${alpha})`;
 }
 
@@ -35,7 +46,61 @@ export default function ScreenLight() {
   const [colorIndex, setColorIndex] = useState<number>(0);
   const [brightness, setBrightness] = useState<number>(1);
   const [controlsVisible, setControlsVisible] = useState<boolean>(true);
+  const [hydrated, setHydrated] = useState<boolean>(false);
   const opacity = useRef(new Animated.Value(1)).current;
+  const brightnessRef = useRef<number>(1);
+  const panStartBrightnessRef = useRef<number>(1);
+
+  useEffect(() => {
+    brightnessRef.current = brightness;
+  }, [brightness]);
+
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(STORAGE_KEY)
+      .then((raw) => {
+        if (cancelled) return;
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (
+              typeof parsed?.colorIndex === 'number' &&
+              Number.isInteger(parsed.colorIndex) &&
+              parsed.colorIndex >= 0 &&
+              parsed.colorIndex < COLORS.length
+            ) {
+              setColorIndex(parsed.colorIndex);
+            }
+            if (
+              typeof parsed?.brightness === 'number' &&
+              Number.isFinite(parsed.brightness)
+            ) {
+              setBrightness(clamp01(parsed.brightness));
+            }
+          } catch {
+            // ignore malformed JSON
+          }
+        }
+        setHydrated(true);
+      })
+      .catch(() => {
+        if (!cancelled) setHydrated(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const timer = setTimeout(() => {
+      AsyncStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ colorIndex, brightness })
+      ).catch(() => {});
+    }, PERSIST_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [hydrated, colorIndex, brightness]);
 
   useEffect(() => {
     Animated.timing(opacity, {
@@ -48,45 +113,58 @@ export default function ScreenLight() {
   const selectedColor = COLORS[colorIndex].value;
   const displayColor = scaleColor(selectedColor, brightness);
   const controlsBrightness =
-    CONTROLS_MIN_BRIGHTNESS + (1 - CONTROLS_MIN_BRIGHTNESS) * brightness;
+    CONTROLS_MIN_BRIGHTNESS + (1 - CONTROLS_MIN_BRIGHTNESS) * clamp01(brightness);
   const selectedRing = dimmedWhite(controlsBrightness, 1);
   const unselectedRing = dimmedWhite(controlsBrightness, 0.25);
   const sliderMaxTrack = dimmedWhite(controlsBrightness, 0.3);
 
-  const gesture = useMemo(() => {
+  const { swipeAndPan, backgroundTap } = useMemo(() => {
     const cycleBy = (step: number) =>
       setColorIndex((i) => (i + step + COLORS.length) % COLORS.length);
-    const adjustBrightness = (delta: number) =>
-      setBrightness((b) => Math.max(0, Math.min(1, b + delta)));
 
-    return Gesture.Race(
-      Gesture.Fling()
-        .direction(Directions.LEFT)
-        .runOnJS(true)
-        .onStart(() => cycleBy(1)),
-      Gesture.Fling()
-        .direction(Directions.RIGHT)
-        .runOnJS(true)
-        .onStart(() => cycleBy(-1)),
-      Gesture.Fling()
-        .direction(Directions.UP)
-        .runOnJS(true)
-        .onStart(() => adjustBrightness(BRIGHTNESS_STEP)),
-      Gesture.Fling()
-        .direction(Directions.DOWN)
-        .runOnJS(true)
-        .onStart(() => adjustBrightness(-BRIGHTNESS_STEP)),
-    );
+    const flingLeft = Gesture.Fling()
+      .direction(Directions.LEFT)
+      .runOnJS(true)
+      .onStart(() => cycleBy(1));
+
+    const flingRight = Gesture.Fling()
+      .direction(Directions.RIGHT)
+      .runOnJS(true)
+      .onStart(() => cycleBy(-1));
+
+    const verticalPan = Gesture.Pan()
+      .activeOffsetY([-10, 10])
+      .failOffsetX([-30, 30])
+      .runOnJS(true)
+      .onStart(() => {
+        panStartBrightnessRef.current = brightnessRef.current;
+      })
+      .onUpdate((event) => {
+        const dy = event.translationY;
+        if (typeof dy !== 'number' || !Number.isFinite(dy)) return;
+        const next = panStartBrightnessRef.current - dy / BRIGHTNESS_PAN_SENSITIVITY;
+        setBrightness(clamp01(next));
+      });
+
+    const tap = Gesture.Tap()
+      .maxDistance(10)
+      .maxDuration(300)
+      .runOnJS(true)
+      .onStart(() => setControlsVisible((v) => !v));
+
+    return {
+      swipeAndPan: Gesture.Race(flingLeft, flingRight, verticalPan),
+      backgroundTap: tap,
+    };
   }, []);
 
   return (
-    <GestureDetector gesture={gesture}>
+    <GestureDetector gesture={swipeAndPan}>
       <View style={[styles.container, { backgroundColor: displayColor }]}>
         <StatusBar hidden />
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={() => setControlsVisible((v) => !v)}
-        />
+        <GestureDetector gesture={backgroundTap}>
+          <View style={StyleSheet.absoluteFill} />
+        </GestureDetector>
         <SafeAreaView
           style={[styles.controlsWrapper, { pointerEvents: 'box-none' }]}
           edges={['bottom']}
