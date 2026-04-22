@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Slider from '@react-native-community/slider';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -31,6 +32,8 @@ const RAINBOW = [
   '#FF0000',
 ] as const;
 const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
+
+SplashScreen.preventAutoHideAsync();
 
 const CONTROLS_MIN_BRIGHTNESS = 0.5;
 const BRIGHTNESS_PAN_SENSITIVITY = 300;
@@ -126,6 +129,10 @@ export default function ScreenLight() {
     }, PERSIST_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [hydrated, colorIndex, brightness, customColor]);
+
+  useEffect(() => {
+    if (hydrated) SplashScreen.hideAsync();
+  }, [hydrated]);
 
   useEffect(() => {
     Animated.timing(opacity, {
