@@ -1,10 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Slider from '@react-native-community/slider';
+import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Directions, Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import ColorPicker from 'react-native-wheel-color-picker';
 
 type LightColor = { name: string; value: string };
 
@@ -15,6 +17,20 @@ const COLORS: LightColor[] = [
   { name: 'Orange', value: '#FF8833' },
   { name: 'Red', value: '#E61919' },
 ];
+
+const CUSTOM_INDEX = COLORS.length;
+const TOTAL_COLORS = COLORS.length + 1;
+const DEFAULT_CUSTOM_COLOR = '#FF00FF';
+const RAINBOW = [
+  '#FF0000',
+  '#FF8800',
+  '#FFFF00',
+  '#00CC00',
+  '#0088FF',
+  '#AA00FF',
+  '#FF0000',
+] as const;
+const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
 
 const CONTROLS_MIN_BRIGHTNESS = 0.5;
 const BRIGHTNESS_PAN_SENSITIVITY = 300;
@@ -45,6 +61,9 @@ function dimmedWhite(brightness: number, alpha: number): string {
 export default function ScreenLight() {
   const [colorIndex, setColorIndex] = useState<number>(0);
   const [brightness, setBrightness] = useState<number>(1);
+  const [customColor, setCustomColor] = useState<string>(DEFAULT_CUSTOM_COLOR);
+  const [pickerOpen, setPickerOpen] = useState<boolean>(false);
+  const [pickerDraft, setPickerDraft] = useState<string>(DEFAULT_CUSTOM_COLOR);
   const [controlsVisible, setControlsVisible] = useState<boolean>(true);
   const [hydrated, setHydrated] = useState<boolean>(false);
   const opacity = useRef(new Animated.Value(1)).current;
@@ -67,7 +86,7 @@ export default function ScreenLight() {
               typeof parsed?.colorIndex === 'number' &&
               Number.isInteger(parsed.colorIndex) &&
               parsed.colorIndex >= 0 &&
-              parsed.colorIndex < COLORS.length
+              parsed.colorIndex < TOTAL_COLORS
             ) {
               setColorIndex(parsed.colorIndex);
             }
@@ -76,6 +95,12 @@ export default function ScreenLight() {
               Number.isFinite(parsed.brightness)
             ) {
               setBrightness(clamp01(parsed.brightness));
+            }
+            if (
+              typeof parsed?.customColor === 'string' &&
+              HEX_COLOR_RE.test(parsed.customColor)
+            ) {
+              setCustomColor(parsed.customColor);
             }
           } catch {
             // ignore malformed JSON
@@ -96,11 +121,11 @@ export default function ScreenLight() {
     const timer = setTimeout(() => {
       AsyncStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ colorIndex, brightness })
+        JSON.stringify({ colorIndex, brightness, customColor })
       ).catch(() => {});
     }, PERSIST_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [hydrated, colorIndex, brightness]);
+  }, [hydrated, colorIndex, brightness, customColor]);
 
   useEffect(() => {
     Animated.timing(opacity, {
@@ -110,8 +135,10 @@ export default function ScreenLight() {
     }).start();
   }, [controlsVisible, opacity]);
 
-  const selectedColor = COLORS[colorIndex].value;
-  const displayColor = scaleColor(selectedColor, brightness);
+  const selectedHex =
+    colorIndex < COLORS.length ? COLORS[colorIndex].value : customColor;
+  const effectiveHex = pickerOpen ? pickerDraft : selectedHex;
+  const displayColor = scaleColor(effectiveHex, brightness);
   const controlsBrightness =
     CONTROLS_MIN_BRIGHTNESS + (1 - CONTROLS_MIN_BRIGHTNESS) * clamp01(brightness);
   const selectedRing = dimmedWhite(controlsBrightness, 1);
@@ -120,7 +147,7 @@ export default function ScreenLight() {
 
   const { swipeAndPan, backgroundTap } = useMemo(() => {
     const cycleBy = (step: number) =>
-      setColorIndex((i) => (i + step + COLORS.length) % COLORS.length);
+      setColorIndex((i) => (i + step + TOTAL_COLORS) % TOTAL_COLORS);
 
     const flingLeft = Gesture.Fling()
       .direction(Directions.LEFT)
@@ -157,6 +184,8 @@ export default function ScreenLight() {
       backgroundTap: tap,
     };
   }, []);
+
+  const isCustomSelected = colorIndex === CUSTOM_INDEX;
 
   return (
     <GestureDetector gesture={swipeAndPan}>
@@ -199,6 +228,39 @@ export default function ScreenLight() {
                   />
                 );
               })}
+              <Pressable
+                onPress={() => setColorIndex(CUSTOM_INDEX)}
+                onLongPress={() => {
+                  setPickerDraft(customColor);
+                  setPickerOpen(true);
+                }}
+                delayLongPress={400}
+                accessibilityLabel="Custom color"
+                accessibilityHint="Long press to choose a custom color"
+                accessibilityRole="button"
+                accessibilityState={{ selected: isCustomSelected }}
+              >
+                <LinearGradient
+                  colors={RAINBOW}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[
+                    styles.customRing,
+                    isCustomSelected
+                      ? styles.customRingSelected
+                      : styles.customRingUnselected,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.customInner,
+                      {
+                        backgroundColor: scaleColor(customColor, controlsBrightness),
+                      },
+                    ]}
+                  />
+                </LinearGradient>
+              </Pressable>
             </View>
             <Slider
               style={styles.slider}
@@ -212,6 +274,49 @@ export default function ScreenLight() {
             />
           </Animated.View>
         </SafeAreaView>
+        <Modal
+          visible={pickerOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPickerOpen(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Custom Color</Text>
+              <View style={styles.pickerWrapper}>
+                <ColorPicker
+                  color={pickerDraft}
+                  onColorChange={setPickerDraft}
+                  thumbSize={32}
+                  sliderSize={28}
+                  noSnap
+                  row={false}
+                  swatches={false}
+                />
+              </View>
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={() => setPickerOpen(false)}
+                  style={[styles.modalBtn, styles.modalBtnSecondary]}
+                >
+                  <Text style={styles.modalBtnText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setCustomColor(pickerDraft);
+                    setColorIndex(CUSTOM_INDEX);
+                    setPickerOpen(false);
+                  }}
+                  style={[styles.modalBtn, styles.modalBtnPrimary]}
+                >
+                  <Text style={[styles.modalBtnText, styles.modalBtnTextPrimary]}>
+                    Done
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </GestureDetector>
   );
@@ -250,8 +355,74 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     transform: [{ scale: 1.15 }],
   },
+  customRing: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customRingUnselected: {
+    padding: 3,
+    opacity: 0.7,
+  },
+  customRingSelected: {
+    padding: 4,
+    transform: [{ scale: 1.15 }],
+  },
+  customInner: {
+    flex: 1,
+    alignSelf: 'stretch',
+    borderRadius: 22,
+  },
   slider: {
     width: '100%',
     height: 40,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: '#1c1c1e',
+    borderRadius: 20,
+    padding: 20,
+  },
+  modalTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  pickerWrapper: {
+    height: 320,
+    marginBottom: 20,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalBtnSecondary: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  modalBtnPrimary: {
+    backgroundColor: '#fff',
+  },
+  modalBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalBtnTextPrimary: {
+    color: '#000',
   },
 });
