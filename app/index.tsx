@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Slider from '@react-native-community/slider';
+import * as Brightness from 'expo-brightness';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -75,6 +76,7 @@ export default function ScreenLight() {
 
   useEffect(() => {
     brightnessRef.current = brightness;
+    Brightness.setBrightnessAsync(brightness).catch(() => {});
   }, [brightness]);
 
   useEffect(() => {
