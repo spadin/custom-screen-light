@@ -3,6 +3,9 @@
 # dependencies
 node_modules/
 
+# AI
+.claude
+
 # Expo
 .expo/
 dist/
