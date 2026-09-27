@@ -33,7 +33,7 @@ Non-obvious gotcha — **`.runOnJS(true)` on every gesture is required**. `react
 
 ## Config notes
 
-- `app.json`: `experiments.reactCompiler: true`, `experiments.typedRoutes: true`. iOS bundle id `com.sandropadin.screenlight`; `ITSAppUsesNonExemptEncryption: false` is set for App Store submission. The new architecture and Android edge-to-edge are always on in SDK 57, so the old `newArchEnabled` / `edgeToEdgeEnabled` keys are gone.
+- `app.json`: `experiments.reactCompiler: true`, `experiments.typedRoutes: true`. App name is "Overnight Screen Light" (must match the App Store Connect record). iOS bundle id `com.sandropadin.screenlight`, App Store Connect app ID `6762953105` (`submit.production.ios.ascAppId` in `eas.json`). The `slug` stays `custom-screen-light` because it is tied to the EAS project ID. `ITSAppUsesNonExemptEncryption: false` is set for App Store submission. The new architecture and Android edge-to-edge are always on in SDK 57, so the old `newArchEnabled` / `edgeToEdgeEnabled` keys are gone.
 - `tsconfig.json`: path alias `@/*` → project root.
 - Status bar: iOS hides it via `ios.infoPlist.UIStatusBarHidden` (plus `UIViewControllerBasedStatusBarAppearance: false`) in `app.json`, **not** `<StatusBar hidden />`. iOS 27 turned the `UIApplication` status-bar setters that component calls into no-ops, so on iOS it silently stopped hiding anything and only emitted deprecation warnings. `app/index.tsx` therefore renders `<StatusBar hidden />` only when `Platform.OS !== 'ios'`; Android still needs it. Verified hidden on both iOS 26.1 and iOS 27.
 - `ios/` and `android/` are generated prebuild output and are **gitignored** — never hand-edit them, the next `expo prebuild` wipes it. Durable native changes belong in a config plugin under `plugins/`.
