@@ -33,6 +33,7 @@ Non-obvious gotcha — **`.runOnJS(true)` on every gesture is required**. `react
 
 ## Config notes
 
-- `app.json`: `newArchEnabled: true`, `experiments.reactCompiler: true`, `experiments.typedRoutes: true`. iOS bundle id `com.anonymous.custom-screen-light`; `ITSAppUsesNonExemptEncryption: false` is set for App Store submission.
+- `app.json`: `experiments.reactCompiler: true`, `experiments.typedRoutes: true`. iOS bundle id `com.sandropadin.screenlight`; `ITSAppUsesNonExemptEncryption: false` is set for App Store submission. The new architecture and Android edge-to-edge are always on in SDK 57, so the old `newArchEnabled` / `edgeToEdgeEnabled` keys are gone.
 - `tsconfig.json`: path alias `@/*` → project root.
-- The `ios/` directory is checked in (prebuild output used by `expo run:ios`).
+- `ios/` and `android/` are generated prebuild output and are **gitignored** — never hand-edit them, the next `expo prebuild` wipes it. Durable native changes belong in a config plugin under `plugins/`.
+- `plugins/withUISceneLifecycle.js` adopts the UIScene life cycle (scene manifest + `SceneDelegate`). iOS 27 refuses to launch without it, and the SDK 57 prebuild template doesn't wire it up. **This is temporary — delete it when upgrading to SDK 58**, whose template ships the same wiring; the file's header comment has the removal steps and what to verify afterwards. The plugin throws rather than silently no-op if the template's AppDelegate shape changes, so if prebuild fails there after an SDK bump, re-check it against the new template.

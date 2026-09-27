@@ -70,7 +70,7 @@ export default function ScreenLight() {
   const [pickerDraft, setPickerDraft] = useState<string>(DEFAULT_CUSTOM_COLOR);
   const [controlsVisible, setControlsVisible] = useState<boolean>(true);
   const [hydrated, setHydrated] = useState<boolean>(false);
-  const opacity = useRef(new Animated.Value(1)).current;
+  const [opacity] = useState(() => new Animated.Value(1));
   const brightnessRef = useRef<number>(1);
   const panStartBrightnessRef = useRef<number>(1);
 
@@ -172,9 +172,13 @@ export default function ScreenLight() {
       .activeOffsetY([-10, 10])
       .failOffsetX([-30, 30])
       .runOnJS(true)
+      // These callbacks read refs, but they run on gesture events after render,
+      // never during it. The rule can't see through the deferred closure.
+      // eslint-disable-next-line react-hooks/refs
       .onStart(() => {
         panStartBrightnessRef.current = brightnessRef.current;
       })
+      // eslint-disable-next-line react-hooks/refs
       .onUpdate((event) => {
         const dy = event.translationY;
         if (typeof dy !== 'number' || !Number.isFinite(dy)) return;
