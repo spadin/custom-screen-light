@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Directions, Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ColorPicker from 'react-native-wheel-color-picker';
@@ -203,7 +203,7 @@ export default function ScreenLight() {
   return (
     <GestureDetector gesture={swipeAndPan}>
       <View style={[styles.container, { backgroundColor: displayColor }]}>
-        <StatusBar hidden />
+        {Platform.OS !== 'ios' && <StatusBar hidden />}
         <GestureDetector gesture={backgroundTap}>
           <View style={StyleSheet.absoluteFill} />
         </GestureDetector>
