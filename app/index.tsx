@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Slider from '@react-native-community/slider';
 import * as Brightness from 'expo-brightness';
+import { useKeepAwake } from 'expo-keep-awake';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -63,6 +64,7 @@ function dimmedWhite(brightness: number, alpha: number): string {
 }
 
 export default function ScreenLight() {
+  useKeepAwake();
   const [colorIndex, setColorIndex] = useState<number>(0);
   const [brightness, setBrightness] = useState<number>(1);
   const [customColor, setCustomColor] = useState<string>(DEFAULT_CUSTOM_COLOR);
